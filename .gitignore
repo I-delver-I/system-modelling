@@ -1,3 +1,6 @@
+# Ignore temporary files starting with ~
+~*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
