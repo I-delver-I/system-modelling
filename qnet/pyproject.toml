@@ -9,5 +9,10 @@ version = "0.1.0"
 requires-python = ">=3.9"
 keywords = ["queueing-network", "discrete-event-simulation"]
 license = { text = "MIT License" }
-authors = [{ "name" = "Dmytro Pluhatyrov", "email" = "dmytro.pluhatyrov@gmail.com" }]
-dependencies = ["prettytable >= 3.5.0", "dill >= 0.3.6"]
+authors = [
+  { name = "Dmytro Pluhatyrov", email = "dmytro.pluhatyrov@gmail.com" }
+]
+dependencies = [
+  "prettytable >= 3.5.0",
+  "dill >= 0.3.6"
+]

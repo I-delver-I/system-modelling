@@ -1,6 +1,10 @@
+"""
+Transition nodes: route items to another node with zero processing time, optionally by probability.
+"""
+
 import random
-from abc import abstractmethod
 import itertools
+from abc import abstractmethod
 from typing import Iterable, Optional, Any, cast
 
 from .common import INF_TIME, I
@@ -9,6 +13,9 @@ from .utils import filter_none
 
 
 class BaseTransitionNode(Node[I, NM]):
+    """
+    A node that immediately transfers an item to another node (no queue, no channels).
+    """
 
     def __init__(self, delay_fn: DelayFn = lambda: 0, **kwargs: Any) -> None:
         super().__init__(delay_fn=delay_fn, **kwargs)
@@ -17,7 +24,7 @@ class BaseTransitionNode(Node[I, NM]):
 
     @property
     def current_items(self) -> Iterable[I]:
-        return filter_none((self.item, ))
+        return filter_none((self.item,))
 
     def start_action(self, item: I) -> None:
         super().start_action(item)
@@ -38,21 +45,33 @@ class BaseTransitionNode(Node[I, NM]):
         self.next_time = INF_TIME
 
     def to_dict(self) -> dict[str, Any]:
-        return {'item': self.item, 'next_node': self.next_node.name if self.next_node else None}
+        return {
+            "item": self.item,
+            "next_node": self.next_node.name if self.next_node else None
+        }
 
     def _before_time_update_hook(self, time: float) -> None:
+        """
+        Ensure that at each time step, we do not have a next_node set in advance.
+        """
         self.next_node = None
         super()._before_time_update_hook(time)
 
-    def _process_item(self, _: I) -> None:
-        pass
-
     @abstractmethod
-    def _get_next_node(self, _: I) -> Optional[Node[I, NodeMetrics]]:
+    def _get_next_node(self, item: I) -> Optional[Node[I, NodeMetrics]]:
         raise NotImplementedError
+
+    def _process_item(self, _: I) -> None:
+        """
+        A hook for any custom logic applied before calling self._end_action().
+        """
+        pass
 
 
 class ProbaTransitionNode(BaseTransitionNode[I, NM]):
+    """
+    A node that routes an item to one of multiple next_nodes with given probabilities.
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -62,6 +81,9 @@ class ProbaTransitionNode(BaseTransitionNode[I, NM]):
 
     @property
     def rest_proba(self) -> float:
+        """
+        The remaining probability after adding any explicitly assigned next nodes.
+        """
         return 1 - self.proba_sum
 
     @property
@@ -69,16 +91,23 @@ class ProbaTransitionNode(BaseTransitionNode[I, NM]):
         return len(self.next_nodes)
 
     @property
-    def connected_nodes(self) -> Iterable['Node[I, NodeMetrics]']:
+    def connected_nodes(self) -> Iterable["Node[I, NodeMetrics]"]:
         return itertools.chain(filter_none(self.next_nodes), super().connected_nodes)
 
     def add_next_node(self, node: Optional[Node[I, NodeMetrics]], proba: float = 1.0) -> None:
-        proba_sum = self.proba_sum + proba
-        assert proba_sum <= 1, 'Total probability must be <= 1. Given: {proba_sum}'
-        self.proba_sum = proba_sum
+        """
+        Add another node to the transition's list, with a probability for selection.
+        """
+        new_proba_sum = self.proba_sum + proba
+        assert new_proba_sum <= 1, f"Total probability cannot exceed 1. Attempted: {new_proba_sum}"
+        self.proba_sum = new_proba_sum
         self.next_nodes.append(node)
         self.next_probas.append(proba)
 
     def _get_next_node(self, _: I) -> Optional[Node[I, NodeMetrics]]:
-        assert self.proba_sum == 1, 'Total probability must be equal to 1'
+        """
+        Randomly choose among next_nodes with assigned probabilities. 
+        Must sum up to 1 in total.
+        """
+        assert self.proba_sum == 1, "Total probability must be exactly 1."
         return random.choices(self.next_nodes, self.next_probas, k=1)[0]
