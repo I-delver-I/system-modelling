@@ -8,9 +8,9 @@ import prettytable as pt
 from abc import ABC, abstractmethod
 from typing import Callable, Generic, TypeVar, Any, Mapping, Iterable
 
-from .common import T, I, SupportsDict, Metrics
-from .node import Node, NodeMetrics
-from .model import EvaluationReport, ModelMetrics
+from .core_models import T, I, SupportsDict, Metrics
+from .simulation_node import Node, NodeMetrics
+from .simulation_engine import EvaluationReport, ModelMetrics
 
 M_contra = TypeVar("M_contra", bound=Metrics, contravariant=True)
 N_contra = TypeVar("N_contra", bound=Node, contravariant=True)

@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Callable, Generic, Iterable, Optional, TypeVar
 
 import dill
 
-from .common import INF_TIME, TIME_EPS, T, I, Metrics
-from .node import Node, NodeMetrics
-from .factory import BaseFactoryNode
-from .queueing import QueueingNode
+from .core_models import INF_TIME, TIME_EPS, T, I, Metrics
+from .simulation_node import Node, NodeMetrics
+from .item_generator import BaseFactoryNode
+from .service_node import QueueingNode
 
 if TYPE_CHECKING:
-    from .logger import BaseLogger
+    from .results_logger import BaseLogger
 
 MM = TypeVar("MM", bound="ModelMetrics")
 

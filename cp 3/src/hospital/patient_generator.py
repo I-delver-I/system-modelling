@@ -5,8 +5,8 @@ Node that creates new HospitalItem objects with randomized sick types.
 import random
 from typing import Any
 
-from qnet.node import NM
-from qnet.factory import BaseFactoryNode
+from qnet.simulation_node import NM
+from qnet.item_generator import BaseFactoryNode
 
 from .patient_types import HospitalItem, SickType
 

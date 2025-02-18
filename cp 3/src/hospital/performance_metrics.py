@@ -4,7 +4,7 @@ Collects overall performance metrics for the hospital model.
 
 from dataclasses import dataclass
 
-from qnet.model import ModelMetrics
+from qnet.simulation_engine import ModelMetrics
 from .patient_types import HospitalItem, SickType
 from .utils import MeanMeter
 

@@ -7,9 +7,9 @@ Defines the routing nodes for the hospital simulation:
 import itertools
 from typing import Iterable, Optional, Any
 
-from qnet.node import NM, Node, NodeMetrics
-from qnet.queueing import QueueingMetrics, QueueingNode
-from qnet.transition import BaseTransitionNode, ProbaTransitionNode
+from qnet.simulation_node import NM, Node, NodeMetrics
+from qnet.service_node import QueueingMetrics, QueueingNode
+from qnet.routing_node import BaseTransitionNode, ProbaTransitionNode
 
 from .patient_types import HospitalItem, SickType
 

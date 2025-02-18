@@ -5,8 +5,8 @@ Implements the BankQueueingNode and its custom metrics for the bank simulation.
 from dataclasses import dataclass, field
 from typing import Any
 
-from qnet.common import I
-from qnet.queueing import QueueingNode, QueueingMetrics
+from qnet.core_models import I
+from qnet.service_node import QueueingNode, QueueingMetrics
 
 
 @dataclass(eq=False)

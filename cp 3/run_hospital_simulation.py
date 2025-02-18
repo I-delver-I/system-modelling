@@ -15,12 +15,14 @@ from src.hospital import (
     EmergencyTransitionNode
 )
 
-from qnet.common import PriorityQueue, Queue
-from qnet.node import NodeMetrics
-from qnet.dist import erlang
-from qnet.queueing import QueueingNode, QueueingMetrics, ChannelPool
-from qnet.logger import CLILogger
-from qnet.model import Model, Nodes
+
+from qnet.core_models import PriorityQueue, Queue
+from qnet.simulation_node import NodeMetrics
+from qnet.probability_distributions import erlang
+from qnet.service_node import QueueingNode, QueueingMetrics, ChannelPool
+from qnet.results_logger import CLILogger
+from qnet.simulation_engine import Model, Nodes
+from qnet.simulation_engine import Model, ModelMetrics, Nodes, Evaluation, Verbosity
 
 
 def _priority_fn(item: HospitalItem) -> int:
@@ -32,6 +34,8 @@ def _priority_fn(item: HospitalItem) -> int:
     """
     return int(item.sick_type != SickType.FIRST and not item.as_first_sick)
 
+def average_emergency_queue(model: Model[HospitalItem, HospitalModelMetrics]) -> float:
+        return model.nodes["2_at_emergency"].metrics.mean_queuelen
 
 def run_simulation() -> None:
     """
@@ -131,6 +135,9 @@ def run_simulation() -> None:
     # Build and run the model
     model = Model(
         nodes=Nodes[HospitalItem].from_node_tree_root(incoming_sick_people),
+        evaluations=[
+        Evaluation[float](name="Average Emergency Queue", evaluate=average_emergency_queue)
+        ],
         logger=CLILogger[HospitalItem](),
         metrics=HospitalModelMetrics()
     )

@@ -5,7 +5,7 @@ Defines the data types used to represent hospital patients.
 from enum import Enum
 from dataclasses import dataclass, field
 
-from qnet.common import Item
+from qnet.core_models import Item
 
 
 class SickType(int, Enum):

@@ -6,11 +6,11 @@ import random
 from functools import partial
 
 from src.bank import BankQueueingNode, BankQueueingMetrics, BankTransitionNode
-from qnet.common import Item, Queue
-from qnet.queueing import QueueingMetrics, Task, ChannelPool
-from qnet.factory import FactoryNode
-from qnet.logger import CLILogger
-from qnet.model import Model, ModelMetrics, Nodes, Evaluation, Verbosity
+from qnet.core_models import Item, Queue
+from qnet.service_node import QueueingMetrics, Task, ChannelPool
+from qnet.item_generator import FactoryNode
+from qnet.results_logger import CLILogger
+from qnet.simulation_engine import Model, ModelMetrics, Nodes, Evaluation, Verbosity
 
 
 def run_simulation() -> None:

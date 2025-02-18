@@ -5,9 +5,9 @@ Implements the bank's transition node logic.
 import itertools
 from typing import Iterable, Optional, Any
 
-from qnet.common import I
-from qnet.node import NM, Node, NodeMetrics
-from qnet.transition import BaseTransitionNode
+from qnet.core_models import I
+from qnet.simulation_node import NM, Node, NodeMetrics
+from qnet.routing_node import BaseTransitionNode
 
 from .service_queue import BankQueueingNode
 

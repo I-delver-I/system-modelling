@@ -7,9 +7,9 @@ import itertools
 from abc import abstractmethod
 from typing import Iterable, Optional, Any, cast
 
-from .common import INF_TIME, I
-from .node import NM, Node, NodeMetrics, DelayFn
-from .utils import filter_none
+from .core_models import INF_TIME, I
+from .simulation_node import NM, Node, NodeMetrics, DelayFn
+from .helpers import filter_none
 
 
 class BaseTransitionNode(Node[I, NM]):
