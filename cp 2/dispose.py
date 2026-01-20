@@ -29,6 +29,16 @@ class DisposeElement(Element):
         # Dispose не планує подій сам, він пасивний
         self.next_time = float('inf') 
         self.stats = DisposeStats(self)
+        
+    def start_action(self) -> None:
+        """
+        CRITICAL FIX: Count the item immediately when it enters this block.
+        """
+        # 1. Count the item
+        self.stats.num_events += 1
+        
+        # 2. Call parent logic (optional for Dispose, but good practice)
+        super().start_action()
     
     def end_action(self) -> None:
         """
