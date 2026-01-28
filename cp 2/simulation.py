@@ -90,7 +90,7 @@ def run_task_4_simulation() -> None:
     print(f"{'Delay':<8} | {'P1 Fail %':<10} | {'P1 Queue':<10} | {'P2 Queue':<10} | {'P3 Queue':<10} | {'Disposed':<10}")
     print("-" * 75)
     
-    delays_to_test = [0.5, 1.0, 1.5, 2.0, 3.0]
+    delays_to_test = [0.5, 0.8, 0.9, 1.0, 1.1, 1.5, 2.0, 5.0]
     
     for delay in delays_to_test:
         # 1. Створення повної моделі (як у Завданні 3)
