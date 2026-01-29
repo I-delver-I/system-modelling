@@ -37,7 +37,7 @@ def run_simulation() -> None:
         queue=Queue(maxlen=3),
         metrics=BankQueueingMetrics(),
         channel_pool=ChannelPool[Item](max_channels=1),
-        delay_fn=partial(random.expovariate, lambd=1.0 / 0.3),
+        delay_fn=lambda: 0.0,   # Dummy function
     )
 
     checkout2 = BankQueueingNode[Item](
@@ -46,7 +46,7 @@ def run_simulation() -> None:
         queue=Queue(maxlen=3),
         metrics=BankQueueingMetrics(),
         channel_pool=ChannelPool[Item](max_channels=1),
-        delay_fn=partial(random.expovariate, lambd=1.0 / 0.3),
+        delay_fn=lambda: 0.0,   # Dummy function
     )
 
     # Connect the nodes
