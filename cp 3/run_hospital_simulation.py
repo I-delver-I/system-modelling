@@ -15,7 +15,6 @@ from src.hospital import (
     EmergencyTransitionNode
 )
 
-
 from qnet.core_models import PriorityQueue, Queue
 from qnet.simulation_node import NodeMetrics
 from qnet.probability_distributions import erlang
@@ -36,6 +35,13 @@ def _priority_fn(item: HospitalItem) -> int:
 
 def average_emergency_queue(model: Model[HospitalItem, HospitalModelMetrics]) -> float:
         return model.nodes["2_at_emergency"].metrics.mean_queuelen
+    
+def mean_lab_arrival_interval(model: Model) -> float:
+    """
+    Reads the standard 'mean_in_interval' metric from the Registry node.
+    This automatically tracks the average time between arrivals.
+    """
+    return model.nodes["6_at_reception"].metrics.mean_in_interval
 
 def run_simulation() -> None:
     """
@@ -103,7 +109,7 @@ def run_simulation() -> None:
         name="6_at_reception",
         queue=Queue[HospitalItem](),
         metrics=QueueingMetrics(),
-        channel_pool=ChannelPool(),  # unlimited
+        channel_pool=ChannelPool(max_channels=1),
         delay_fn=partial(erlang, lambd=3 / 4.5, k=3)
     )
 
@@ -117,7 +123,8 @@ def run_simulation() -> None:
 
     testing_transition = TestingTransitionNode[NodeMetrics](
         name="8_after_testing",
-        metrics=NodeMetrics()
+        metrics=NodeMetrics(),
+        emergency_node=at_emergency
     )
 
     # Linking
@@ -128,15 +135,13 @@ def run_simulation() -> None:
     at_reception.set_next_node(on_testing)
     on_testing.set_next_node(testing_transition)
 
-    # 20% chance that patients go back to emergency, 80% they leave the system
-    testing_transition.add_next_node(at_emergency, proba=0.2)
-    testing_transition.add_next_node(None, proba=testing_transition.rest_proba)
-
     # Build and run the model
     model = Model(
         nodes=Nodes[HospitalItem].from_node_tree_root(incoming_sick_people),
         evaluations=[
-        Evaluation[float](name="Average Emergency Queue", evaluate=average_emergency_queue)
+        Evaluation[float](name="Average Emergency Queue", evaluate=average_emergency_queue),
+        Evaluation(name="Mean Time In System", evaluate=lambda m: m.metrics.mean_time_in_system),
+        Evaluation(name="Lab Arrival Interval", evaluate=mean_lab_arrival_interval),
         ],
         logger=CLILogger[HospitalItem](),
         metrics=HospitalModelMetrics()
