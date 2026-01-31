@@ -18,7 +18,7 @@ from qnet.routing_node import ProbaTransitionNode
 from qnet.results_logger import CLILogger
 from qnet.simulation_engine import Model, ModelMetrics, Nodes, Verbosity, Evaluation
 
-ELEMENTARY_OPERATION_TIME = 1e-6  # in seconds
+ELEMENTARY_OPERATION_TIME = 7e-5
 
 
 @dataclass(eq=False)
@@ -49,12 +49,12 @@ def create_model(num_nodes: int, factory_time: float, queueing_time: float,
                                        delay_fn=partial(random.expovariate, lambd=1.0 / queueing_time))
         node_idx += 1
         if idx >= 1:
-            node = ProbaTransitionNode[Item, NodeMetrics](name=f'{node_idx:0{num_digits}d}_previous_vs_next',
+            transitionNode = ProbaTransitionNode[Item, NodeMetrics](name=f'{node_idx:0{num_digits}d}_previous_vs_next',
                                                           metrics=NodeMetrics())
             node_idx += 1
-            node.add_next_node(prev_node.prev_node, proba=prev_proba)
-            node.add_next_node(next_node, proba=1.0 - prev_proba)
-            prev_node.set_next_node(node)
+            transitionNode.add_next_node(prev_node, proba=prev_proba)
+            transitionNode.add_next_node(next_node, proba=1.0 - prev_proba)
+            prev_node.set_next_node(transitionNode)
         else:
             prev_node.set_next_node(next_node)
         prev_node = next_node
@@ -83,42 +83,52 @@ def run_simulation(model: Model[Item, ModelMetrics[Item]], simulation_time: floa
     measured_time = end_time - start_time
 
     num_elem_operations: float = model.evaluation_reports[0].result
-    predicted_time = model.model_metrics.mean_event_intensity * model.model_metrics.num_events * num_elem_operations * ELEMENTARY_OPERATION_TIME
+    predicted_time = model.model_metrics.num_events * num_elem_operations * ELEMENTARY_OPERATION_TIME
     return measured_time, predicted_time
 
 
-def get_time_complexity_plot(simulation: list[float], measured: list[float], predicted: list[float]) -> Figure:
+def get_time_complexity_plot(simulation: list[float], measured: list[float], predicted: list[float], 
+                             proba: float) -> Figure:
     figure, ax = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
     ax.plot(simulation, measured, color='blue', label='measured')
     ax.plot(simulation, predicted, color='red', label='predicted')
     ax.legend()
     ax.grid(True)
-    ax.set(xlabel='Simulation time', ylabel='Real Time', title='Time complexity estimation')
+    ax.set(xlabel='Simulation time', ylabel='Real Time', 
+           title=f'Time complexity estimation (Feedback Probability = {proba})')
     return figure
 
 
 if __name__ == '__main__':
-    # Parameters
-    save_path = Path('/tmp/time_complexity.png')
+    # Параметри
     num_nodes = 20
     factory_time = 0.5
     queueing_time = 0.2
-    prev_proba = 0.0
+    prev_probas_to_test = [0.0, 0.1, 0.5]
     simulation_times = [1e3, 2e3, 3e3, 4e3, 5e3, 6e3, 7e3, 8e3, 9e3, 1e4]
+    
+    for prev_proba in prev_probas_to_test:
+        print(f"\n--- Running simulation for prev_proba = {prev_proba} ---")
+        
+        # Створюємо унікальне ім'я файлу для кожного графіка
+        save_path = Path(f'time_complexity_proba_{prev_proba}.png')
+        
+        # Оцінка часової складності
+        model = create_model(num_nodes=num_nodes,
+                            factory_time=factory_time,
+                            queueing_time=queueing_time,
+                            prev_proba=prev_proba)
 
-    # Time complexity estimation
-    model = create_model(num_nodes=num_nodes,
-                         factory_time=factory_time,
-                         queueing_time=queueing_time,
-                         prev_proba=prev_proba)
+        measured_times, predicted_times = [], []
 
-    measured_times, predicted_times = [], []
+        for simulation_time in tqdm(simulation_times, desc=f'Simulations (p={prev_proba})'):
+            measured_time, predicted_time = run_simulation(model=model, simulation_time=simulation_time)
+            num_elem_operations: float = model.evaluation_reports[0].result
+            
+            model.reset()
+            measured_times.append(measured_time)
+            predicted_times.append(predicted_time)
 
-    for simulation_time in tqdm(simulation_times, desc='Simulations'):
-        measured_time, predicted_time = run_simulation(model=model, simulation_time=simulation_time)
-        model.reset()
-        measured_times.append(measured_time)
-        predicted_times.append(predicted_time)
-
-    figure = get_time_complexity_plot(simulation_times, measured_times, predicted_times)
-    figure.savefig(save_path, dpi=300)
+        figure = get_time_complexity_plot(simulation_times, measured_times, predicted_times, prev_proba)
+        figure.savefig(save_path, dpi=300)
+        print(f"Graph saved to {save_path.absolute()}")
