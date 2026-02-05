@@ -9,7 +9,7 @@ from dispose import DisposeElement
 def run_task_1_and_2_simulation() -> None:
     """
     ЗАВДАННЯ 1 та 2:
-    1. Реалізувати просту модель: Create -> Process.
+    1. Реалізувати просту модель: Create -> Process -> Dispose.
     2. Статистика: Обчислити середнє завантаження пристрою (реалізовано в статистиці ProcessElement).
     """    
     # Create: Експоненційний розподіл, середній інтервал = 2.0
@@ -26,8 +26,11 @@ def run_task_1_and_2_simulation() -> None:
         get_delay=partial(random.expovariate, lambd=1.0 / 1.0)
     )
     
-    # З'єднання: Create -> Process
+    dispose = DisposeElement(name='DISPOSE')
+    
+    # З'єднання: Create -> Process -> Dispose
     creator.add_next_element(processor)
+    processor.add_next_element(dispose)
     
     # Запуск симуляції
     model = Model(parent=creator)
