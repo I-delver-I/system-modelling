@@ -1,6 +1,5 @@
 """
 QueueingNode: a node with a waiting queue and a pool of service channels (ChannelPool).
-CORRECTED VERSION with proper blocking logic.
 """
 
 import itertools
@@ -263,7 +262,6 @@ class QueueingNode(Node[I, QM]):
     """
     Node with a waiting queue (queue) and a ChannelPool (channel_pool).
     
-    CORRECTED VERSION with proper blocking logic:
     - Per-task blocking duration tracking
     - Correct state transitions
     - Integrated blocking predicates

@@ -1,6 +1,5 @@
 """
 Model orchestration: runs the simulation by moving time forward to each event.
-CORRECTED VERSION with proper unblocking support.
 """
 
 import statistics
@@ -128,8 +127,6 @@ class Model(Generic[I, MM]):
     """
     The core class that runs the discrete-event simulation by repeatedly jumping
     from one event time to the next.
-    
-    CORRECTED VERSION with proper unblocking support.
     """
 
     def __init__(
@@ -210,8 +207,7 @@ class Model(Generic[I, MM]):
     def _goto(self, time: float, end_time: float = INF_TIME) -> None:
         """
         Move to a particular simulation time, process all node(s) whose event time is exactly that.
-        
-        CORRECTED: Includes unblocking safety net to handle cascading unblocks.
+        Includes unblocking safety net to handle cascading unblocks.
         """
         new_time = min(time, end_time)
         self._before_time_update_hook(new_time)
@@ -237,7 +233,7 @@ class Model(Generic[I, MM]):
 
     def _unblock_safety_net(self) -> None:
         """
-        NEW: Safety net to ensure all possible unblocking happens.
+        Safety net to ensure all possible unblocking happens.
         
         Iteratively attempts to unblock all nodes until no more progress is made.
         This handles cascading unblocks in multi-stage networks.
