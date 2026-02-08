@@ -1,5 +1,6 @@
 """
 Model orchestration: runs the simulation by moving time forward to each event.
+CORRECTED VERSION with proper unblocking support.
 """
 
 import statistics
@@ -83,6 +84,7 @@ class ModelMetrics(Metrics, Generic[I]):
     """
     num_events: int = field(init=False, default=0)
     items: set[I] = field(init=False, default_factory=set)
+    num_unblock_cycles: int = field(init=False, default=0)  # NEW: track unblocking attempts
 
     @property
     def mean_event_intensity(self) -> float:
@@ -118,14 +120,16 @@ class ModelMetrics(Metrics, Generic[I]):
         for field_name in ("processed_items", "time_per_item"):
             metrics_dict.pop(field_name, None)  # remove these from dict representation
         metrics_dict["num_events"] = self.num_events
+        metrics_dict["num_unblock_cycles"] = self.num_unblock_cycles
         return metrics_dict
 
 
 class Model(Generic[I, MM]):
     """
     The core class that runs the discrete-event simulation by repeatedly jumping
-    from one event time to the next. Nodes define their next event times, and
-    the model picks the earliest event to process.
+    from one event time to the next.
+    
+    CORRECTED VERSION with proper unblocking support.
     """
 
     def __init__(
@@ -133,14 +137,18 @@ class Model(Generic[I, MM]):
         nodes: Nodes[I],
         logger: "BaseLogger[I]",
         metrics: MM,
-        evaluations: Optional[list[Evaluation]] = None
+        evaluations: Optional[list[Evaluation]] = None,
+        enable_unblock_safety_net: bool = True  # NEW: configurable safety net
     ) -> None:
         self.nodes = nodes
         self.logger = logger
         self.metrics = metrics
         self.evaluations = [] if evaluations is None else evaluations
         self.current_time = 0.0
-        self._collect_items()
+        self.enable_unblock_safety_net = enable_unblock_safety_net
+        # Do not collect items here to avoid mutating node internal structures
+        # (some node.current_items implementations may expose internal lists).
+        # Collection will occur naturally during simulation steps.
 
     @property
     def next_time(self) -> float:
@@ -202,6 +210,8 @@ class Model(Generic[I, MM]):
     def _goto(self, time: float, end_time: float = INF_TIME) -> None:
         """
         Move to a particular simulation time, process all node(s) whose event time is exactly that.
+        
+        CORRECTED: Includes unblocking safety net to handle cascading unblocks.
         """
         new_time = min(time, end_time)
         self._before_time_update_hook(new_time)
@@ -218,7 +228,48 @@ class Model(Generic[I, MM]):
             nd.end_action()
             self._after_node_end_action_hook(nd)
 
+        # SAFETY NET: Try to unblock any remaining blocked nodes
+        # This handles edge cases where unblocking notifications might be missed
+        if self.enable_unblock_safety_net:
+            self._unblock_safety_net()
+
         self._collect_items()
+
+    def _unblock_safety_net(self) -> None:
+        """
+        NEW: Safety net to ensure all possible unblocking happens.
+        
+        Iteratively attempts to unblock all nodes until no more progress is made.
+        This handles cascading unblocks in multi-stage networks.
+        
+        Example: A→B→C where C becomes free should unblock B, then B should unblock A.
+        """
+        max_iterations = len(self.nodes) * 2  # Prevent infinite loops
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            progress_made = False
+            
+            # Try to unblock all nodes that have blocked tasks
+            for nd in self.nodes.values():
+                if hasattr(nd, 'try_unblock') and hasattr(nd, 'blocked_tasks'):
+                    initial_blocked = len(nd.blocked_tasks)
+                    nd.try_unblock()
+                    if len(nd.blocked_tasks) < initial_blocked:
+                        progress_made = True
+            
+            # Try to notify all nodes that might have blocked predecessors
+            for nd in self.nodes.values():
+                if hasattr(nd, '_notify_blocked_predecessors') and nd.can_accept_item():
+                    nd._notify_blocked_predecessors()
+            
+            # If no node made progress, we're done
+            if not progress_made:
+                break
+        
+        if iteration > 1:
+            self.metrics.num_unblock_cycles += 1
 
     def _collect_items(self) -> None:
         """
