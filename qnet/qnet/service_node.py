@@ -18,6 +18,88 @@ QM = TypeVar("QM", bound="QueueingMetrics")
 # t = current_time
 BlockingPredicate = Callable[[], bool]
 
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class BlockingStrategy(Protocol):
+    """
+    Interface for handling items that cannot move to the default destination.
+    """
+    def handle_blocked_item(self, node: 'QueueingNode', item: Any) -> bool:
+        """
+        Called when 'item' finishes service but 'node.next_node' is unavailable.
+        
+        Args:
+            node: The node where the blocking is happening.
+            item: The item that finished processing.
+            
+        Returns:
+            True: If the item was successfully disposed of (Dropped, Rerouted, etc.).
+                  The node can now proceed to process its own queue.
+            False: If the item remains stuck in the node (Standard Blocking).
+                   The node enters BLOCKED state.
+        """
+        ...
+    
+class RerouteOnBlockStrategy(BlockingStrategy):
+    """Reroute the item to an alternative node if blocked."""
+    def __init__(self, target_node: 'Node', backup_strategy: BlockingStrategy = None):
+        self.target_node = target_node
+        self.backup_strategy = backup_strategy or DropStrategy()
+        
+    def handle_blocked_item(self, node: 'QueueingNode', item: Any) -> bool:
+        # Check if the fallback destination is open
+        if self.target_node.can_accept_item():
+            # Success! Reroute the item.
+            node.metrics.num_blocks += 1 # Technically blocked from primary path
+            node._item_out_hook(item)    # Log exit from current node
+            self.target_node.start_action(item) # Enter new node
+            return True # Item is gone from current node
+        else:
+            # Fallback destination is also full! Use backup plan.
+            return self.backup_strategy.handle_blocked_item(node, item)
+        
+class BlockStrategy(BlockingStrategy):
+    """Default BAS behavior: hold the item and block the channel."""
+    def handle_blocked_item(self, node: 'QueueingNode', item: Any) -> bool:
+        # Create a task wrapper for the blocked item
+        task = Task(
+            item=item, 
+            next_time=node.current_time,
+            blocked_start_time=node.current_time
+        )
+        node.blocked_tasks.append(task)
+        node.metrics.num_blocks += 1
+        
+        # Track max blocked stats
+        if len(node.blocked_tasks) > node.metrics.max_blocked_tasks:
+            node.metrics.max_blocked_tasks = len(node.blocked_tasks)
+        
+        node.state = NodeState.BLOCKED
+        if node.next_node:
+            node.next_node.blocked_predecessors.add(node)
+            
+        return False  # Item is NOT gone; it is stuck.
+
+class DropStrategy(BlockingStrategy):
+    """Loss System: drop the item immediately."""
+    def handle_blocked_item(self, node: 'QueueingNode', item: Any) -> bool:
+        node.metrics.num_drops += 1
+        node._item_out_hook(item) # Log departure
+        return True # Item is gone; channel is free.
+
+class ReprocessStrategy(BlockingStrategy):
+    """Re-queue: send item back to the start of the queue."""
+    def handle_blocked_item(self, node: 'QueueingNode', item: Any) -> bool:
+        node.metrics.num_blocks += 1
+        if not node.queue.is_full:
+            node.queue.push(item)
+            return True # Item moved to queue; channel is free.
+        else:
+            # If queue is also full, force drop (or fallback to another logic)
+            node.metrics.num_drops += 1
+            node._item_out_hook(item)
+            return True
 
 @dataclass(eq=False)
 class QueueingMetrics(NodeMetrics):
@@ -33,7 +115,8 @@ class QueueingMetrics(NodeMetrics):
     num_failures: int = field(init=False, default=0)
     blocked_time: float = field(init=False, default=0)
     num_blocks: int = field(init=False, default=0)
-    max_blocked_tasks: int = field(init=False, default=0)  # NEW: peak blocked queue
+    num_drops: int = field(init=False, default=0)
+    max_blocked_tasks: int = field(init=False, default=0)
 
     @property
     def mean_in_interval(self) -> float:
@@ -273,6 +356,7 @@ class QueueingNode(Node[I, QM]):
         queue: BoundedCollection[I],
         channel_pool: ChannelPool[I],
         blocking_predicate: Optional[BlockingPredicate] = None,
+        blocking_strategy: Optional[BlockingStrategy] = None,
         **kwargs: Any
     ) -> None:
         super().__init__(**kwargs)
@@ -280,6 +364,7 @@ class QueueingNode(Node[I, QM]):
         self.channel_pool = channel_pool
         self.next_time = INF_TIME
         self.blocked_tasks: list[Task[I]] = []
+        self.blocking_strategy = blocking_strategy or BlockStrategy()
         
         # Blocking predicate B(S,t): returns True if blocking should occur
         # If None (default), blocking uses default logic (next_node.can_accept_item())
@@ -345,7 +430,7 @@ class QueueingNode(Node[I, QM]):
                 item=item,
                 next_time=self._predict_item_time(item=item)
             )
-            self.add_task(task)  # add_task sets state to BUSY
+            self.add_task(task)
 
     def end_action(self) -> I:
         """
@@ -360,30 +445,18 @@ class QueueingNode(Node[I, QM]):
         if DEBUG:
             self._validate_blocking_invariants()
         
-        # Step 1: Pop the finished item from the channel pool
-        finished_item = self.channel_pool.pop_finished_task().item
+        # Step 1: Pop finished task
+        finished_task = self.channel_pool.pop_finished_task()
+        finished_item = finished_task.item
         
-        # Step 2: Determine if blocking should occur (BEFORE changing state)
+        # Step 2: Check Blocking Condition
         will_be_blocked = self._should_block()
         
-        # Step 3: Handle the finished item (Place it or Send it)
+        # Step 3: Delegate to Strategy
         if will_be_blocked:
             # === BLOCKING PATH ===
-            # The item stays in the node, conceptually occupying a channel
-            task = Task[I](
-                item=finished_item, 
-                next_time=self.current_time,
-                blocked_start_time=self.current_time
-            )
-            self.blocked_tasks.append(task)
-            self.metrics.num_blocks += 1
-            
-            if len(self.blocked_tasks) > self.metrics.max_blocked_tasks:
-                self.metrics.max_blocked_tasks = len(self.blocked_tasks)
-            
-            self.state = NodeState.BLOCKED
-            self.next_node.blocked_predecessors.add(self)
-                
+            # The strategy decides if the item is cleared (True) or stuck (False)
+            self.blocking_strategy.handle_blocked_item(self, finished_item)
             # Note: We do NOT return immediately. We might still have a 2nd free channel!
         else:
             # === NORMAL PATH ===
@@ -398,12 +471,12 @@ class QueueingNode(Node[I, QM]):
             # or created space. Notify predecessors!
             self.try_unblock() # (This handles its own notifications)
         
-        # Step 4: Refill from Queue
+        # Step 4: Refill from Queue (Only if the strategy cleared the item)
         # We only pull from queue if we have REAL capacity.
         # Capacity = Occupied Channels + Blocked Tasks
         effective_occupancy = self.channel_pool.num_occupied_channels + len(self.blocked_tasks)
-        
         can_refill = True
+        
         if self.channel_pool.max_channels is not None:
             if effective_occupancy >= self.channel_pool.max_channels:
                 can_refill = False
@@ -418,7 +491,6 @@ class QueueingNode(Node[I, QM]):
 
         # Ensure our next_time reflects current channel pool state
         self.next_time = self._predict_next_time()
-
         return finished_item
 
     def reset(self) -> None:
