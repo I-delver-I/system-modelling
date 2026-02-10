@@ -3,10 +3,11 @@ Implements the BankQueueingNode and its custom metrics for the bank simulation.
 """
 
 from dataclasses import dataclass, field
+import queue
 import random
 from typing import Any
 
-from qnet.core_models import I
+from qnet.core_models import I, Queue
 from qnet.service_node import QueueingNode, QueueingMetrics
 
 
@@ -30,9 +31,10 @@ class BankQueueingNode(QueueingNode[I, BankQueueingMetrics]):
     1. Pulls items from neighbor if queue diff is large.
     2. Dynamically changes service time based on neighbor's status.
     """
+    queue: Queue[I]
 
-    def __init__(self, min_queuelen_diff: int, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, min_queuelen_diff: int, queue: Queue[I], **kwargs: Any) -> None:
+        super().__init__(queue=queue, **kwargs)
         self.min_queuelen_diff = min_queuelen_diff
         self.neighbor: BankQueueingNode[I] = None
         
@@ -79,11 +81,11 @@ class BankQueueingNode(QueueingNode[I, BankQueueingMetrics]):
         if self.neighbor is not None:
             while (self.neighbor.queuelen - self.queuelen) >= self.min_queuelen_diff:
                 # Steal the last item from neighbor's queue
-                last_item = self.neighbor.queue.pop()
-                
-                # Register the 'steal' in metrics/hooks
-                self.neighbor._item_in_hook(last_item)
+                last_item = self.neighbor.queue.revoke()                
                 self.queue.push(last_item)
+                
+                self._item_in_hook(last_item)
+                self.neighbor.metrics.num_in -= 1
                 self.metrics.num_from_neighbor += 1
                 
         return item

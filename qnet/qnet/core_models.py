@@ -204,6 +204,9 @@ class Queue(BoundedCollection[T]):
 
     def pop(self) -> T:
         return self.queue.popleft()
+    
+    def revoke(self) -> T:
+        return self.queue.pop()
 
 
 class LIFOQueue(Queue[T]):
