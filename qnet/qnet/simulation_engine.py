@@ -220,6 +220,14 @@ class Model(Generic[I, MM]):
             nd for nd in self.nodes.values()
             if abs(self.current_time - nd.next_time) <= TIME_EPS
         ]
+        
+        # --- DETERMINISTIC CONFLICT RESOLUTION ---
+        # We sort nodes by name (or ID) to ensure that if multiple events happen 
+        # at the exact same time, they are processed in a fixed, reproducible order.
+        # This prevents random behavior in deterministic scenarios.
+        end_action_nodes.sort(key=lambda node: node.name)
+        # -----------------------------------------
+        
         for nd in end_action_nodes:
             nd.end_action()
             self._after_node_end_action_hook(nd)
