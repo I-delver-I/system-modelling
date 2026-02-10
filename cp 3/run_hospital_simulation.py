@@ -88,8 +88,8 @@ def run_simulation() -> None:
     )
 
     # Path to chamber requires 3 possible "guides"
-    to_chumber = QueueingNode[HospitalItem, QueueingMetrics](
-        name="4_to_chumber",
+    to_chamber = QueueingNode[HospitalItem, QueueingMetrics](
+        name="4_to_chamber",
         queue=Queue[HospitalItem](),
         metrics=QueueingMetrics(),
         channel_pool=ChannelPool(max_channels=3),
@@ -120,20 +120,29 @@ def run_simulation() -> None:
         channel_pool=ChannelPool(max_channels=2),
         delay_fn=partial(erlang, lambd=2 / 4, k=2)
     )
+    
+    from_lab_transit = QueueingNode[HospitalItem, QueueingMetrics](
+        name="9_from_lab_transit",
+        queue=Queue[HospitalItem](),
+        metrics=QueueingMetrics(),
+        channel_pool=ChannelPool(), # Безліміт каналів (просто йдуть)
+        delay_fn=partial(random.uniform, a=2, b=5)
+    )
 
     testing_transition = TestingTransitionNode[NodeMetrics](
         name="8_after_testing",
         metrics=NodeMetrics(),
-        emergency_node=at_emergency
+        emergency_node=from_lab_transit
     )
 
     # Linking
     incoming_sick_people.set_next_node(at_emergency)
     at_emergency.set_next_node(emergency_transition)
-    emergency_transition.set_next_nodes(chumber=to_chumber, reception=to_reception)
+    emergency_transition.set_next_nodes(chamber=to_chamber, reception=to_reception)
     to_reception.set_next_node(at_reception)
     at_reception.set_next_node(on_testing)
     on_testing.set_next_node(testing_transition)
+    from_lab_transit.set_next_node(at_emergency)
 
     # Build and run the model
     model = Model(

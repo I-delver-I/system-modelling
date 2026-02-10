@@ -61,18 +61,18 @@ class EmergencyTransitionNode(BaseTransitionNode[HospitalItem, NM]):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.chumber: HospitalQueueingNode = None
+        self.chamber: HospitalQueueingNode = None
         self.reception: HospitalQueueingNode = None
 
     @property
     def connected_nodes(self) -> Iterable["Node[HospitalItem, NodeMetrics]"]:
-        return itertools.chain((self.chumber, self.reception), super().connected_nodes)
+        return itertools.chain((self.chamber, self.reception), super().connected_nodes)
 
-    def set_next_nodes(self, chumber: HospitalQueueingNode, reception: HospitalQueueingNode) -> None:
+    def set_next_nodes(self, chamber: HospitalQueueingNode, reception: HospitalQueueingNode) -> None:
         """
         Assign the two possible queueing routes: chamber or reception.
         """
-        self.chumber = chumber
+        self.chamber = chamber
         self.reception = reception
 
     def _get_next_node(self, item: HospitalItem) -> Optional[Node[HospitalItem, NodeMetrics]]:
@@ -81,12 +81,12 @@ class EmergencyTransitionNode(BaseTransitionNode[HospitalItem, NM]):
         else to the reception node.
         """
         # Safety check
-        if self.chumber is None or self.reception is None:
+        if self.chamber is None or self.reception is None:
             raise ValueError("Next nodes (chamber/reception) are not set!")
         
         # Logic: Type 1 OR Priority Flag -> Chamber
         if item.sick_type == SickType.FIRST or item.as_first_sick:
-            return self.chumber
+            return self.chamber
         
         # Logic: All others -> Reception
         return self.reception
