@@ -5,10 +5,25 @@ Base Node classes: all nodes must inherit from Node, implementing start_action()
 from abc import ABC, abstractmethod
 import inspect
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Callable, Generic, Iterable, Optional, TypeVar, Any, cast
 
 from .core_models import I, SupportsDict, Metrics, ActionRecord, ActionType
 from .helpers import filter_none
+
+
+class NodeState(Enum):
+    """
+    Three-state model for nodes in a queueing system:
+    
+    IDLE: Node is not processing anything; either no items, or all items have departed.
+    BUSY: Node is actively processing an item; has a scheduled event (next_time is finite).
+    BLOCKED: Node finished processing but cannot send item to next_node (next_node is full).
+             Waiting for next_node to free up space. No new service events can start until unblocked.
+    """
+    IDLE = "idle"
+    BUSY = "busy"
+    BLOCKED = "blocked"
 
 NM = TypeVar("NM", bound="NodeMetrics")
 DelayFn = Callable[..., float]
@@ -37,6 +52,11 @@ class NodeMetrics(Metrics):
 class Node(ABC, SupportsDict, Generic[I, NM]):
     """
     Abstract Node in a queueing network.
+    
+    Three-state model:
+    - IDLE: Not processing, no blocked items
+    - BUSY: Processing an item, has scheduled event (next_time is finite)
+    - BLOCKED: Finished processing, but cannot send to next_node (next_node is full)
     """
 
     num_nodes: int = 0
@@ -58,6 +78,11 @@ class Node(ABC, SupportsDict, Generic[I, NM]):
         self.prev_node: Optional[Node[I, NodeMetrics]] = None
         self.current_time: float = 0.0
         self.next_time: float = 0.0
+        self.state: NodeState = NodeState.IDLE
+        
+        # Nodes that are blocked trying to send items to this node
+        # Used for pull-based unblocking: when this node frees space, it notifies blocked predecessors
+        self.blocked_predecessors: set["Node[I, NodeMetrics]"] = set()
 
     @property
     def connected_nodes(self) -> Iterable["Node[I, NodeMetrics]"]:
@@ -72,6 +97,14 @@ class Node(ABC, SupportsDict, Generic[I, NM]):
         Items that are currently being processed or waiting in this node.
         """
         return []
+
+    def can_accept_item(self) -> bool:
+        """
+        Check if this node can accept a new item (has capacity).
+        Default: always accept. Override in subclasses to enforce capacity limits.
+        Used for route blocking: a node should not release an item to next_node if next_node is full.
+        """
+        return True
 
     def start_action(self, item: I) -> None:
         """
@@ -115,6 +148,8 @@ class Node(ABC, SupportsDict, Generic[I, NM]):
         """
         self.current_time = 0
         self.next_time = 0
+        self.state = NodeState.IDLE
+        self.blocked_predecessors.clear()
         self.reset_metrics()
 
     def to_dict(self) -> dict[str, Any]:
